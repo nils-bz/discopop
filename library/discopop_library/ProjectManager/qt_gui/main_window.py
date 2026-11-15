@@ -17,7 +17,7 @@ from typing import Dict, List, Optional, Tuple
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QCloseEvent, QIcon, QKeySequence, QResizeEvent, QShortcut
-from PySide6.QtWidgets import QLabel, QMainWindow, QSplitter, QTabWidget, QWidget
+from PySide6.QtWidgets import QLabel, QMainWindow, QSplitter, QTabWidget, QWidget, QToolButton
 
 from discopop_library.ProjectManager.ProjectManagerArguments import ProjectManagerArguments
 from discopop_library.ProjectManager.qt_gui import widgets
@@ -30,9 +30,11 @@ from discopop_library.ProjectManager.qt_gui.panels.hotspot_panel import HotspotP
 from discopop_library.ProjectManager.qt_gui.panels.patch_repair_panel import PatchRepairPanel
 from discopop_library.ProjectManager.qt_gui.panels.pattern_detection_panel import PatternDetectionPanel
 from discopop_library.ProjectManager.qt_gui.panels.report_panel import ReportPanel
+from discopop_library.ProjectManager.qt_gui.panels.assistant_panel import AssistantPanel
 from discopop_library.ProjectManager.qt_gui.status import StatusLine
 
 # re-exported: the names were defined here first
+from discopop_library.ProjectManager.qt_gui.tabs import TAB_ASSISTANT
 from discopop_library.ProjectManager.qt_gui.tabs import (
     TAB_AUTOTUNING as TAB_AUTOTUNING,
     TAB_EDITOR as TAB_EDITOR,
@@ -79,7 +81,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("DiscoPoP Project Manager")
         self.setWindowIcon(QIcon(ICON_PATH))
-        self.resize(1600, 1000)
+        self.resize(1900, 1000)
         self.setMinimumSize(1100, 700)
         self.arguments = arguments
         self.was_initialized = was_initialized
@@ -91,6 +93,14 @@ class MainWindow(QMainWindow):
         self.statusBar().addWidget(self.status, 1)
         self.statusBar().addPermanentWidget(self.dot_dp_label)
 
+        self._assistant_width = 300
+        self.right_toggle = QToolButton()
+        self.right_toggle.setText("Assistant")
+        self.right_toggle.setCheckable(True)
+        self.right_toggle.setChecked(True)
+        self.right_toggle.clicked.connect(self.toggle_right_panel)
+        self.statusBar().addPermanentWidget(self.right_toggle)
+
         self.splitter = QSplitter(Qt.Orientation.Horizontal)
         self.setCentralWidget(self.splitter)
         self.tabs = QTabWidget()
@@ -101,7 +111,9 @@ class MainWindow(QMainWindow):
         self._build_panels()
         self.splitter.setStretchFactor(0, 0)
         self.splitter.setStretchFactor(1, 1)
-        self.splitter.setSizes([280, 1320])
+        self.splitter.setStretchFactor(2, 0)
+        self.splitter.setCollapsible(2, True)
+        self.splitter.setSizes([280, 1320, self._assistant_width])
 
     # --- assembly ---
 
@@ -121,6 +133,7 @@ class MainWindow(QMainWindow):
         self.pattern_detection_panel = PatternDetectionPanel(args, state, status, self)
         self.patch_repair_panel = PatchRepairPanel(args, state, status)
         self.autotuning_panel = AutotuningPanel(args, state, status, self)
+        self.assistant_panel = AssistantPanel(args, state, status, parent = self)
         self.config_list = ConfigListPanel(
             args,
             state,
@@ -140,9 +153,10 @@ class MainWindow(QMainWindow):
             (TAB_HOTSPOT, self.hotspot_panel),
             (TAB_PATTERN_DETECTION, self.pattern_detection_panel),
             (TAB_PATCH_REPAIR, self.patch_repair_panel),
-            (TAB_AUTOTUNING, self.autotuning_panel),
+            (TAB_AUTOTUNING, self.autotuning_panel)
         ):
             self.add_tab(name, panel)
+        self.splitter.addWidget(self.assistant_panel)
 
         # the autotuner records its measurements as execution results
         state.subscribe(AutotuningFinished, lambda _event: self.report_panel.update_display())
@@ -220,3 +234,22 @@ class MainWindow(QMainWindow):
         super().resizeEvent(event)
         # the path takes at most half of the status bar; the status text keeps the rest
         self.dot_dp_label.setMaximumWidth(max(self.width() // 2, 100))
+
+    def toggle_right_panel(self) -> None:
+        sizes = self.splitter.sizes()
+        if sizes[2] > 0:
+            self._assistant_width = sizes[2]
+            sizes[1] += sizes[2]
+            sizes[2] = 0
+        else:
+            width = self._assistant_width
+            sizes[1] -= width
+            sizes[2] = width
+        self.splitter.setSizes(sizes)
+        self._sync_right_toggle()
+
+    def _sync_right_toggle(self) -> None:
+        width = self.splitter.sizes()[2]
+        if width > 0:
+            self._right_width = width
+        self.right_toggle.setChecked(width > 0)
