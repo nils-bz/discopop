@@ -45,6 +45,7 @@ from discopop_library.ProjectManager.qt_gui.panel import Panel
 from discopop_library.ProjectManager.qt_gui.status import StatusLine
 from discopop_library.ProjectManager.reports.full import generate_full_report
 from discopop_library.ProjectManager.services.jobs import WorkEvent, WorkFinished
+from discopop_library.ProjectManager.services.project_lock import ProjectLock
 from discopop_library.ProjectManager.services.project_state import ProjectState, ResultsChanged
 from discopop_library.ProjectManager.services.reports import (
     ReportProblem,
@@ -139,8 +140,10 @@ class ReportPanel(Panel):
         status: StatusLine,
         append_output: Optional[Callable[[str], None]] = None,
         parent: Optional[QWidget] = None,
+        *,
+        project_lock: Optional[ProjectLock] = None,
     ) -> None:
-        super().__init__(arguments, project_state, status, parent)
+        super().__init__(arguments, project_state, status, parent, project_lock=project_lock)
         self._append_output = append_output
         self._execution_running = False
         self.plot_tabs: List[PlotTab] = []

@@ -44,6 +44,7 @@ from discopop_library.ProjectManager.services.jobs import (
     JobSpec,
 )
 from discopop_library.ProjectManager.services.patches import count_patches
+from discopop_library.ProjectManager.services.project_lock import ProjectLock
 from discopop_library.ProjectManager.services.project_state import (
     ConfigurationsChanged,
     HotspotsChanged,
@@ -86,8 +87,10 @@ class PatternDetectionPanel(Panel):
         status: StatusLine,
         tabs: TabHost,
         parent: Optional[QWidget] = None,
+        *,
+        project_lock: Optional[ProjectLock] = None,
     ) -> None:
-        super().__init__(arguments, project_state, status, parent)
+        super().__init__(arguments, project_state, status, parent, project_lock=project_lock)
         self.tabs = tabs
         self.explorer_running = False
         self._explorer_stopped = False

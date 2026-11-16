@@ -63,6 +63,7 @@ from discopop_library.ProjectManager.services.jobs import (
     JobSpec,
 )
 from discopop_library.ProjectManager.services.patches import has_patches, sort_suggestion_ids
+from discopop_library.ProjectManager.services.project_lock import ProjectLock
 from discopop_library.ProjectManager.services.project_state import (
     AutotuningChanged,
     AutotuningFinished,
@@ -119,8 +120,10 @@ class AutotuningPanel(Panel):
         status: StatusLine,
         tabs: TabHost,
         parent: Optional[QWidget] = None,
+        *,
+        project_lock: Optional[ProjectLock] = None,
     ) -> None:
-        super().__init__(arguments, project_state, status, parent)
+        super().__init__(arguments, project_state, status, parent, project_lock=project_lock)
         self._tabs = tabs
         self.running = False
         self._job: Optional[JobRunner] = None

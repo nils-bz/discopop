@@ -72,6 +72,7 @@ from discopop_library.ProjectManager.services.jobs import (
 )
 from discopop_library.ProjectManager.services.modes import EXECUTION_MODES, available_modes
 from discopop_library.ProjectManager.services.patches import sort_suggestion_ids
+from discopop_library.ProjectManager.services.project_lock import ProjectLock
 from discopop_library.ProjectManager.services.project_state import (
     AutotuningChanged,
     AutotuningFinished,
@@ -130,8 +131,9 @@ class ExecutePanel(Panel):
         parent: Optional[QWidget] = None,
         *,
         run_state_changed: Optional[Callable[[bool], None]] = None,
+        project_lock: Optional[ProjectLock] = None,
     ) -> None:
-        super().__init__(arguments, project_state, status, parent)
+        super().__init__(arguments, project_state, status, parent, project_lock=project_lock)
         self.tabs = tabs
         # told True when a run or preparation starts and False when it ended (the Report tab holds its report back)
         self._run_state_changed = run_state_changed

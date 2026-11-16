@@ -55,6 +55,7 @@ from discopop_library.ProjectManager.services.editor_files import (
     last_recorded_execution_output,
     uses_compiler_variables,
 )
+from discopop_library.ProjectManager.services.project_lock import ProjectLock
 from discopop_library.ProjectManager.services.project_state import (
     ConfigChanged,
     ConfigurationsChanged,
@@ -111,8 +112,10 @@ class EditorPanel(Panel):
         status: StatusLine,
         tabs: TabHost,
         parent: Optional[QWidget] = None,
+        *,
+        project_lock: Optional[ProjectLock] = None,
     ) -> None:
-        super().__init__(arguments, project_state, status, parent)
+        super().__init__(arguments, project_state, status, parent, project_lock=project_lock)
         self.tabs = tabs
         self.execution_time_modified = False
         self._loading = False

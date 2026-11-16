@@ -56,6 +56,11 @@ class AutotuningFinished:
     """An autotuning run ended successfully; its selection of suggestions is the new current one."""
 
 
+@dataclass(frozen=True)
+class ProjectBusyChanged:
+    """A runner has started """
+
+
 class ProjectState:
     """The selected configuration plus a synchronous observer.
 

@@ -15,7 +15,7 @@ few callbacks one panel offers another. The panels do not know each other.
 import os
 from typing import Dict, List, Optional, Tuple
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QObject, Qt, Signal
 from PySide6.QtGui import QCloseEvent, QIcon, QKeySequence, QResizeEvent, QShortcut
 from PySide6.QtWidgets import QLabel, QMainWindow, QSplitter, QTabWidget, QWidget, QToolButton
 
@@ -45,9 +45,11 @@ from discopop_library.ProjectManager.qt_gui.tabs import (
     TAB_PATTERN_DETECTION as TAB_PATTERN_DETECTION,
     TAB_REPORT as TAB_REPORT,
 )
+from discopop_library.ProjectManager.services.project_lock import LockHolder, ProjectLock
 from discopop_library.ProjectManager.services.project_state import (
     AutotuningFinished,
     ConfigurationsChanged,
+    ProjectBusyChanged,
     ProjectState,
     ResultsChanged,
 )
@@ -74,6 +76,17 @@ class ElidedPathLabel(QLabel):
         self.setText(self.fontMetrics().elidedText(self._path, Qt.TextElideMode.ElideLeft, width))
 
 
+class _LockChanges(QObject):
+    """Brings the changes of the :class:`ProjectLock` to the main thread.
+
+    The lock calls its ``on_change`` on the thread that acquires or releases it -- a worker thread for the assistant's
+    tool calls -- but ``ProjectState`` subscribers touch widgets. A signal emitted on another thread reaches a slot of
+    this object, which lives on the main thread, as a queued call.
+    """
+
+    changed = Signal(object)
+
+
 class MainWindow(QMainWindow):
     """The window; it is the :class:`TabHost` of the panels."""
 
@@ -83,9 +96,13 @@ class MainWindow(QMainWindow):
         self.setWindowIcon(QIcon(ICON_PATH))
         self.resize(1900, 1000)
         self.setMinimumSize(1100, 700)
+
         self.arguments = arguments
         self.was_initialized = was_initialized
         self.project_state = ProjectState()
+        self._lock_changes = _LockChanges(self)
+        self._lock_changes.changed.connect(self._publish_project_busy)
+        self.project_lock = ProjectLock(self._lock_changes.changed.emit)
         self.panels: List[Panel] = []
 
         self.status = StatusLine()
@@ -119,21 +136,22 @@ class MainWindow(QMainWindow):
 
     def _build_panels(self) -> None:
         """Create the panels and wire them: the events each one reacts to beyond its own, and the callbacks."""
-        args, state, status = self.arguments, self.project_state, self.status
+        args, state, status, lock = self.arguments, self.project_state, self.status, self.project_lock
         self.execute_panel = ExecutePanel(
             args,
             state,
             status,
             self,
             run_state_changed=lambda running: self.report_panel.set_execution_running(running),
+            project_lock=lock,
         )
-        self.editor_panel = EditorPanel(args, state, status, self)
-        self.report_panel = ReportPanel(args, state, status, self.execute_panel.console.append_text)
-        self.hotspot_panel = HotspotPanel(args, state, status, self.execute_panel.timeouts)
-        self.pattern_detection_panel = PatternDetectionPanel(args, state, status, self)
-        self.patch_repair_panel = PatchRepairPanel(args, state, status)
-        self.autotuning_panel = AutotuningPanel(args, state, status, self)
-        self.assistant_panel = AssistantPanel(args, state, status, parent = self)
+        self.editor_panel = EditorPanel(args, state, status, self, project_lock=lock)
+        self.report_panel = ReportPanel(args, state, status, self.execute_panel.console.append_text, project_lock=lock)
+        self.hotspot_panel = HotspotPanel(args, state, status, self.execute_panel.timeouts, project_lock=lock)
+        self.pattern_detection_panel = PatternDetectionPanel(args, state, status, self, project_lock=lock)
+        self.patch_repair_panel = PatchRepairPanel(args, state, status, project_lock=lock)
+        self.autotuning_panel = AutotuningPanel(args, state, status, self, project_lock=lock)
+        self.assistant_panel = AssistantPanel(args, state, status, parent=self, project_lock=lock)
         self.config_list = ConfigListPanel(
             args,
             state,
@@ -141,6 +159,7 @@ class MainWindow(QMainWindow):
             confirm_leave_config=self.editor_panel.confirm_leave,
             open_compilation_editor=self.editor_panel.open_compilation_editor,
             tabs=self,
+            project_lock=lock,
         )
         self.panels.append(self.config_list)
 
@@ -214,6 +233,9 @@ class MainWindow(QMainWindow):
         index = self.tabs.indexOf(self._tab_widgets[name])
         self.tabs.setTabEnabled(index, enabled)
         self.tabs.setTabToolTip(index, tooltip)
+
+    def _publish_project_busy(self, _holder: Optional[LockHolder]) -> None:
+        self.project_state.publish(ProjectBusyChanged())
 
     # --- lifecycle ---
 

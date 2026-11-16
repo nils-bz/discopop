@@ -43,6 +43,7 @@ from discopop_library.ProjectManager.services.assistant import (
     load_mcp_tools,
 )
 from discopop_library.ProjectManager.services.jobs import WorkEvent, WorkFinished, WorkOutput, WorkRunner, WorkStatus
+from discopop_library.ProjectManager.services.project_lock import ProjectLock
 from discopop_library.ProjectManager.services.project_state import ProjectState
 
 
@@ -61,8 +62,9 @@ class AssistantPanel(Panel):
         model_factory: Callable[[], ModelSession] = _default_model,
         tool_loader: Callable[[], List[ToolModule]] = load_mcp_tools,
         parent: Optional[QWidget] = None,
+        project_lock: Optional[ProjectLock] = None,
     ) -> None:
-        super().__init__(arguments, project_state, status, parent)
+        super().__init__(arguments, project_state, status, parent, project_lock=project_lock)
         self._model_factory: Callable[[], ModelSession] = model_factory
         self._tool_loader = tool_loader
         self._assistant: Optional[Assistant] = None

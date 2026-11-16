@@ -61,6 +61,7 @@ from discopop_library.ProjectManager.services.jobs import (
     WorkRunner,
 )
 from discopop_library.ProjectManager.services.patches import has_patches
+from discopop_library.ProjectManager.services.project_lock import ProjectLock
 from discopop_library.ProjectManager.services.project_state import (
     AutotuningChanged,
     ConfigChanged,
@@ -99,8 +100,10 @@ class PatchRepairPanel(Panel):
         project_state: ProjectState,
         status: StatusLine,
         parent: Optional[QWidget] = None,
+        *,
+        project_lock: Optional[ProjectLock] = None,
     ) -> None:
-        super().__init__(arguments, project_state, status, parent)
+        super().__init__(arguments, project_state, status, parent, project_lock=project_lock)
         self.running = False
         self._job: Optional[JobRunner] = None
         self._backend_query: Optional[WorkRunner] = None

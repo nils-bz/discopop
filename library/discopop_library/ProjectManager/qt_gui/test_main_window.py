@@ -7,6 +7,7 @@
 # directory for details.
 
 import sys
+import threading
 from pathlib import Path
 from typing import List
 
@@ -25,7 +26,11 @@ from discopop_library.ProjectManager.qt_gui.main_window import (
 from discopop_library.ProjectManager.qt_gui.panel import Panel
 from discopop_library.ProjectManager.qt_gui.panels.editor_panel import EditorPanel
 from discopop_library.ProjectManager.qt_gui.testing import make_arguments
-from discopop_library.ProjectManager.services.project_state import AutotuningFinished, ResultsChanged
+from discopop_library.ProjectManager.services.project_state import (
+    AutotuningFinished,
+    ProjectBusyChanged,
+    ResultsChanged,
+)
 
 
 def test_all_tabs_exist_in_order(qtbot: QtBot, tmp_path: Path) -> None:
@@ -141,3 +146,31 @@ def test_the_report_follows_the_autotuner_and_waits_for_executions(qtbot: QtBot,
     window.report_panel.generate_report_button.setEnabled(True)
     window.execute_panel._begin_run(window.execute_panel.run_button, "running", "running")
     assert not window.report_panel.generate_report_button.isEnabled()
+
+
+def test_all_panels_share_the_project_lock_of_the_window(qtbot: QtBot, tmp_path: Path) -> None:
+    window = MainWindow(make_arguments(tmp_path))
+    qtbot.addWidget(window)
+    panels = [*window.panels, window.assistant_panel]
+    assert len(panels) == 9
+    assert all(panel.project_lock is window.project_lock for panel in panels)
+
+
+def test_a_lock_change_on_a_worker_thread_is_published_on_the_main_thread(qtbot: QtBot, tmp_path: Path) -> None:
+    window = MainWindow(make_arguments(tmp_path))
+    qtbot.addWidget(window)
+    published_on: List[threading.Thread] = []
+    window.project_state.subscribe(ProjectBusyChanged, lambda _event: published_on.append(threading.current_thread()))
+
+    worker = threading.Thread(target=lambda: window.project_lock.try_acquire("Assistant: gather_data"))
+    worker.start()
+    worker.join()
+    assert published_on == []  # queued: delivered by the event loop, not on the worker
+    qtbot.waitUntil(lambda: len(published_on) == 1)
+    assert published_on == [threading.main_thread()]
+    holder = window.project_lock.holder
+    assert holder is not None and holder.owner == "Assistant: gather_data"
+
+    window.project_lock.release("Assistant: gather_data")
+    qtbot.waitUntil(lambda: len(published_on) == 2)
+    assert window.project_lock.holder is None
