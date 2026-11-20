@@ -13,7 +13,7 @@ the environment (``ANTHROPIC_API_KEY`` or an ``ant auth login`` profile).
 """
 
 import importlib
-from typing import Any, Dict, List, Sequence
+from typing import Any, Dict, List, Optional, Sequence
 
 from discopop_library.ProjectManager.services.assistant import ModelTurn, ToolCall, ToolResult, ToolSpec
 
@@ -26,9 +26,18 @@ FALLBACK_BETA = "server-side-fallback-2026-07-01"
 
 
 class AnthropicSession:
-    def __init__(self) -> None:
+    def __init__(
+        self, model: Optional[str] = None, base_url: Optional[str] = None, api_key: Optional[str] = None
+    ) -> None:
         anthropic = importlib.import_module("anthropic")  # ImportError: the SDK is not installed
-        self._client: Any = anthropic.Anthropic()
+        # what is not given, the SDK takes from the environment (ANTHROPIC_BASE_URL, ANTHROPIC_API_KEY, a profile)
+        options: Dict[str, Any] = {}
+        if base_url is not None:
+            options["base_url"] = base_url
+        if api_key is not None:
+            options["api_key"] = api_key
+        self._client: Any = anthropic.Anthropic(**options)
+        self._model = model or MODEL
         self._messages: List[Dict[str, Any]] = []
 
     def add_user_message(self, text: str) -> None:
@@ -36,7 +45,7 @@ class AnthropicSession:
 
     def next_turn(self, system: str, tools: Sequence[ToolSpec]) -> ModelTurn:
         with self._client.beta.messages.stream(
-            model=MODEL,
+            model=self._model,
             max_tokens=MAX_TOKENS,
             betas=[FALLBACK_BETA],
             fallbacks="default",

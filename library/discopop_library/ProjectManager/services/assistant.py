@@ -12,7 +12,8 @@ The agent loop runs here, without any GUI toolkit, on a ``WorkRunner``: send the
 model, run the tools it calls, send the results back, until it answers without a tool call.
 
 - the model is behind :class:`ModelSession` (one conversation); ``assistant_anthropic.py`` implements it for Claude,
-  a test with a scripted fake, another provider with its own class
+  ``assistant_openai.py`` for any server speaking the OpenAI Chat Completions API (OpenAI, vLLM, Ollama, ...), a
+  test with a scripted fake; ``assistant_backends.py`` chooses one from the command line and the environment
 - the DiscoPoP tools are the tool modules of ``mcp_server`` (``TOOL`` + ``handle``), called *in-process*: no MCP
   subprocess, and their work runs on the GUI's own runner, so it is cancelled like any other GUI job
 - the project is the GUI's: ``project_path`` is filled in here and not shown to the model
@@ -77,6 +78,9 @@ class ToolCall:
     id: str
     name: str
     arguments: Dict[str, Any]
+    # set by a session whose provider sent arguments it could not read (e.g. invalid JSON): the tool is not run,
+    # the model gets this message as the result and can correct its call
+    error: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -201,6 +205,7 @@ def apply_proposal(project_root: str, proposal: EditProposal) -> None:
 
 class Assistant:
     """The conversation of the panel. ``run_turn`` runs on a worker thread, one turn at a time."""
+
     def __init__(self, project_root: str, model: ModelSession, tool_modules: Sequence[ToolModule]) -> None:
         self.project_root = project_root
         self._model = model
@@ -240,6 +245,8 @@ class Assistant:
     # --- tools ---
 
     def _call(self, call: ToolCall, work: WorkContext, turn: TurnResult) -> ToolResult:
+        if call.error is not None:
+            return ToolResult(call.id, call.error, is_error=True)
         try:
             if call.name == _READ_SOURCE.name:
                 return ToolResult(call.id, self._read_source(call.arguments))

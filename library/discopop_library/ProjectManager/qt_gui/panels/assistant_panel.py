@@ -24,9 +24,10 @@ from PySide6.QtWidgets import (
     QSplitter,
     QTextBrowser,
     QVBoxLayout,
-    QWidget, QListWidgetItem,
+    QWidget,
+    QListWidgetItem,
 )
-from PySide6.QtCore import Qt, QObject, Signal, Slot, QThread
+from PySide6.QtCore import Qt
 
 from discopop_library.ProjectManager.ProjectManagerArguments import ProjectManagerArguments
 from discopop_library.ProjectManager.qt_gui import dialogs, widgets
@@ -42,15 +43,34 @@ from discopop_library.ProjectManager.services.assistant import (
     apply_proposal,
     load_mcp_tools,
 )
-from discopop_library.ProjectManager.services.jobs import WorkEvent, WorkFinished, WorkOutput, WorkRunner, WorkStatus
+from discopop_library.ProjectManager.services.assistant_backends import (
+    AssistantBackendConfig,
+    make_session,
+    resolve_backend,
+)
+from discopop_library.ProjectManager.services.jobs import (
+    WorkContext,
+    WorkEvent,
+    WorkFinished,
+    WorkOutput,
+    WorkRunner,
+    WorkStatus,
+)
 from discopop_library.ProjectManager.services.project_lock import ProjectLock
 from discopop_library.ProjectManager.services.project_state import ProjectState
 
 
-def _default_model() -> ModelSession:
-    from discopop_library.ProjectManager.services.assistant_anthropic import AnthropicSession
+def model_factory_from_arguments(arguments: ProjectManagerArguments) -> Callable[[], ModelSession]:
+    """The backend chosen by the ``--assistant-*`` flags and the environment (``services/assistant_backends.py``).
 
-    return AnthropicSession()
+    Resolved when a session is created (on the initializer's thread), so a wrong setting is reported in the panel.
+    """
+    config = AssistantBackendConfig(
+        provider=arguments.assistant_provider,
+        model=arguments.assistant_model,
+        base_url=arguments.assistant_base_url,
+    )
+    return lambda: make_session(resolve_backend(config))
 
 
 class AssistantPanel(Panel):
@@ -59,30 +79,21 @@ class AssistantPanel(Panel):
         arguments: ProjectManagerArguments,
         project_state: ProjectState,
         status: StatusLine,
-        model_factory: Callable[[], ModelSession] = _default_model,
+        model_factory: Optional[Callable[[], ModelSession]] = None,
         tool_loader: Callable[[], List[ToolModule]] = load_mcp_tools,
         parent: Optional[QWidget] = None,
         project_lock: Optional[ProjectLock] = None,
     ) -> None:
         super().__init__(arguments, project_state, status, parent, project_lock=project_lock)
-        self._model_factory: Callable[[], ModelSession] = model_factory
+        self._model_factory: Callable[[], ModelSession] = model_factory or model_factory_from_arguments(arguments)
         self._tool_loader = tool_loader
         self._assistant: Optional[Assistant] = None
         self._runner: Optional[WorkRunner] = None
         self._proposals: Dict[int, EditProposal] = {}
 
-        self._init_thread = QThread(self)
-        self._assistant_initializer = AssistantInitializer(
-            self.arguments.project_root,
-            self._model_factory,
-            self._tool_loader
-        )
-        self._assistant_initializer.moveToThread(self._init_thread)
-        self._init_thread.started.connect(self._assistant_initializer.run)
-        self._assistant_initializer.finished.connect(self._init_assistant)
-        self._assistant_initializer.error.connect(self._on_init_assistant_failed)
-        self._assistant_initializer.finished.connect(self._init_thread.quit)
-        self._assistant_initializer.error.connect(self._init_thread.quit)
+        # the assistant is created in the background (importing the SDK and the MCP tools takes a moment); until
+        # then, Send is disabled
+        self._init_runner: Optional[WorkRunner] = None
         self._assistant_init_error: Optional[str] = None
 
         self.transcript = QTextBrowser()
@@ -134,17 +145,16 @@ class AssistantPanel(Panel):
         layout = QVBoxLayout(self)
         layout.addWidget(splitter)
         self._update_buttons()
-        self._init_thread.start()
+        # on a plain worker thread, not a QThread owned by the panel: deleting the panel while the work still runs
+        # would destroy a running QThread, which aborts the process; the adapter's timer just dies with the panel
+        self._init_runner = start_work(self, self._create_assistant, self._on_assistant_created)
 
     def send(self) -> None:
         text = self.input.toPlainText().strip()
-        if not text or self._runner is not None: return
+        if not text or self._runner is not None:
+            return
         if self._assistant is None:
-            dialogs.show_error(
-                self,
-                "Assistant",
-                self._build_assistant_init_error_msg()
-            )
+            dialogs.show_error(self, "Assistant", self._build_assistant_init_error_msg())
             return
         assistant = self._assistant
         self.input.clear()
@@ -157,9 +167,8 @@ class AssistantPanel(Panel):
         if self._runner is not None:
             self._runner.cancel()
             self.status.set("Stopping the assistant ...", widgets.STATUS_STOP)
-        if self._init_thread.isRunning():
-            self._init_thread.quit() # Take care if the threads run method eventually does some heavy work
-            self._init_thread.wait()
+        if self._init_runner is not None:
+            self._init_runner.cancel()  # the creation does not stop early, but its result is no longer awaited
 
     def _handle(self, event: WorkEvent) -> None:
         if isinstance(event, WorkOutput):
@@ -200,15 +209,20 @@ class AssistantPanel(Panel):
         escaped = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\n", "<br>")
         self.transcript.append(f'<p style="{style}"><b>{who}:</b> {escaped}</p>')
 
-    @Slot(object)
-    def _init_assistant(self, assistant) -> None:
-        self._assistant = assistant
-        self.send_button.setEnabled(True)
+    def _create_assistant(self, _work: WorkContext) -> Assistant:
+        # on the worker thread: touches no widget
+        return Assistant(self.arguments.project_root, self._model_factory(), self._tool_loader())
 
-    @Slot(str)
-    def _on_init_assistant_failed(self, error) -> None:
-        self._assistant_init_error = error
-        self.send_button.setEnabled(True)
+    def _on_assistant_created(self, event: WorkEvent) -> None:
+        if not isinstance(event, WorkFinished):
+            return
+        self._init_runner = None
+        if event.error is not None:
+            # Send stays enabled: it reports the error
+            self._assistant_init_error = event.error
+        else:
+            self._assistant = event.result
+        self._update_buttons()
 
     def _build_assistant_init_error_msg(self) -> str:
         if self._assistant_init_error is not None:
@@ -271,29 +285,3 @@ class AssistantPanel(Panel):
         has_selection = self._selected() is not None
         self.apply_button.setEnabled(has_selection and not is_running)
         self.reject_button.setEnabled(has_selection)
-
-
-class AssistantInitializer(QObject):
-    finished = Signal(object)
-    error = Signal(str)
-    progress = Signal(int)
-
-    def __init__(
-            self,
-            project_root: str,
-            model_factory: Callable[[], ModelSession],
-            tool_loader: Callable[[], List[ToolModule]]
-    ) -> None:
-        super().__init__()
-        self._project_root = project_root
-        self._model_factory = model_factory
-        self._tool_loader = tool_loader
-
-    @Slot()
-    def run(self):
-        try:
-            assistant = Assistant(self._project_root, self._model_factory(), self._tool_loader())
-            self.finished.emit(assistant)
-        except Exception as e:
-            self.error.emit(str(e))
-

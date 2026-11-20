@@ -15,16 +15,7 @@ TAB_HOTSPOT = "Hotspot Detection"
 TAB_PATTERN_DETECTION = "Pattern Detection"
 TAB_PATCH_REPAIR = "Patch Repair"
 TAB_AUTOTUNING = "Autotuning"
-TAB_ASSISTANT = "Assistant"
 # the order of the tabs: hotspots are measured before, and feed into, pattern detection and the autotuner; patch
 # repair sits between them, a suggestion that does not build is one the tuner can only record as a failure
-TAB_ORDER = (
-    TAB_EDITOR,
-    TAB_EXECUTE,
-    TAB_REPORT,
-    TAB_HOTSPOT,
-    TAB_PATTERN_DETECTION,
-    TAB_PATCH_REPAIR,
-    TAB_AUTOTUNING,
-    TAB_ASSISTANT
-)
+# (the assistant is no tab: it is a side pane of the main window, shown and hidden by its toggle button)
+TAB_ORDER = (TAB_EDITOR, TAB_EXECUTE, TAB_REPORT, TAB_HOTSPOT, TAB_PATTERN_DETECTION, TAB_PATCH_REPAIR, TAB_AUTOTUNING)

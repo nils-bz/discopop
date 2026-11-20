@@ -34,7 +34,6 @@ from discopop_library.ProjectManager.qt_gui.panels.assistant_panel import Assist
 from discopop_library.ProjectManager.qt_gui.status import StatusLine
 
 # re-exported: the names were defined here first
-from discopop_library.ProjectManager.qt_gui.tabs import TAB_ASSISTANT
 from discopop_library.ProjectManager.qt_gui.tabs import (
     TAB_AUTOTUNING as TAB_AUTOTUNING,
     TAB_EDITOR as TAB_EDITOR,

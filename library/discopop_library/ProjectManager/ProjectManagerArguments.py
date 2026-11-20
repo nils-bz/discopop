@@ -52,6 +52,11 @@ class ProjectManagerArguments(GeneralArguments):
     # Which toolkit draws the window of --gui: "qt" (PySide6, the default) or "tk" (the original GUI).
     # Both use the same services.
     gui_toolkit: str = "qt"
+    # The model behind the Assistant tab of the Qt GUI; None: from the environment or the default, see
+    # discopop_library.ProjectManager.services.assistant_backends.
+    assistant_provider: Optional[str] = None
+    assistant_model: Optional[str] = None
+    assistant_base_url: Optional[str] = None
     # derived values
     dot_dp: str = ""
     project_dir: str = ""

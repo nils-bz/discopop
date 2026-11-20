@@ -22,6 +22,7 @@ from discopop_library.ProjectManager.configurations.repetitions import (
     DEFAULT_MEASURED_REPETITIONS,
     validate_repetitions,
 )
+from discopop_library.ProjectManager.services.assistant_backends import PROVIDERS as ASSISTANT_PROVIDERS
 
 GUI_COMMAND = "discopop_gui"
 GUI_TOOLKITS = ("tk", "qt")
@@ -55,6 +56,14 @@ def _build_parser() -> ArgumentParser:
     parser.add_argument("--gui", action="store_true", help="Open the graphical configuration manager")
     parser.add_argument("--gui-toolkit", choices=GUI_TOOLKITS, default="qt", help="The toolkit the window of --gui "
                         "is drawn with: qt (PySide6, default) or tk.")
+    parser.add_argument("--assistant-provider", choices=ASSISTANT_PROVIDERS, default=None, help="EXPERIMENTAL: the "
+    "provider of the model behind the Assistant tab of the GUI: anthropic (Claude, default) or openai (any server "
+    "speaking the OpenAI Chat Completions API, e.g. vLLM or Ollama). Default: $DISCOPOP_ASSISTANT_PROVIDER, else "
+    "anthropic. The API key is read from $DISCOPOP_ASSISTANT_API_KEY.")
+    parser.add_argument("--assistant-model", default=None, help="EXPERIMENTAL: the model of the assistant, e.g. "
+    "Qwen/Qwen3.8-27B-FP8 (required for openai). Default: $DISCOPOP_ASSISTANT_MODEL, else the provider's default.")
+    parser.add_argument("--assistant-base-url", default=None, help="EXPERIMENTAL: the URL of the model server, e.g. "
+    "http://localhost:18000/v1. Default: $DISCOPOP_ASSISTANT_BASE_URL, else the provider's own.")
     parser.add_argument("-x", "--execute", default="tiny", help="Comma separated list of configurations to be "
     "executed. Format: <config_name>[:<mode>][:<thread_count>] . Modes: dp,hd,seq,par. Default: tiny")
     parser.add_argument("-xf", "--execute-full", action="store_true", help="Execute all configurations for validation "
@@ -154,6 +163,9 @@ def parse_args(force_gui: bool = False) -> ProjectManagerArguments:
         execution_time_regex=arguments.execution_time_regex,
         execution_repetitions=arguments.execution_repetitions,
         gui_toolkit=arguments.gui_toolkit,
+        assistant_provider=arguments.assistant_provider,
+        assistant_model=arguments.assistant_model,
+        assistant_base_url=arguments.assistant_base_url,
     )
 
 
