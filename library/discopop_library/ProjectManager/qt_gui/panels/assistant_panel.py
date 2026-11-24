@@ -60,17 +60,12 @@ from discopop_library.ProjectManager.services.project_lock import ProjectLock
 from discopop_library.ProjectManager.services.project_state import ProjectState
 
 
-def model_factory_from_arguments(arguments: ProjectManagerArguments) -> Callable[[], ModelSession]:
-    """The backend chosen by the ``--assistant-*`` flags and the environment (``services/assistant_backends.py``).
+def model_factory_from_arguments() -> Callable[[], ModelSession]:
+    """The backend as chosen by the environment variables (``services/assistant_backends.py``).
 
     Resolved when a session is created (on the initializer's thread), so a wrong setting is reported in the panel.
     """
-    config = AssistantBackendConfig(
-        provider=arguments.assistant_provider,
-        model=arguments.assistant_model,
-        base_url=arguments.assistant_base_url,
-    )
-    return lambda: make_session(resolve_backend(config))
+    return lambda: make_session(resolve_backend())
 
 
 class AssistantPanel(Panel):
@@ -85,7 +80,7 @@ class AssistantPanel(Panel):
         project_lock: Optional[ProjectLock] = None,
     ) -> None:
         super().__init__(arguments, project_state, status, parent, project_lock=project_lock)
-        self._model_factory: Callable[[], ModelSession] = model_factory or model_factory_from_arguments(arguments)
+        self._model_factory: Callable[[], ModelSession] = model_factory or model_factory_from_arguments()
         self._tool_loader = tool_loader
         self._assistant: Optional[Assistant] = None
         self._runner: Optional[WorkRunner] = None

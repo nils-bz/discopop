@@ -1,15 +1,25 @@
 import re
+from dataclasses import dataclass
 from typing import List, Dict, Any, Sequence, Tuple
 
 import json
 
 from discopop_library.ProjectManager.services.assistant import ToolCall, ToolSpec
-from discopop_library.ProjectManager.services.assistant_openai import OpenAIResponse
 
 
 # reasoning models served without a reasoning parser (e.g. Qwen 3 on a plain vLLM) put their thinking into the text
 _THINK = re.compile(r"<think>.*?</think>\s*", re.DOTALL)
 _ERROR_EXCERPT = 500
+
+
+
+@dataclass
+class OpenAIResponse:
+    """Parsed response from OpenAI API."""
+
+    text: str
+    raw_tool_calls: List[Dict[str, any]]
+    finish_reason: str
 
 
 def to_tool_calls(raw_openai_calls: List[Dict[str, any]]) -> List[ToolCall]:

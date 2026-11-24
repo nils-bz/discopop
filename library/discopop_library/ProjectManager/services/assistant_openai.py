@@ -22,7 +22,8 @@ from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional, Sequence
 
 from discopop_library.ProjectManager.services import openai_adapter
-from discopop_library.ProjectManager.services.assistant import ModelTurn, ToolCall, ToolResult, ToolSpec
+from discopop_library.ProjectManager.services.assistant import ModelTurn, ToolCall, ToolResult, ToolSpec, ModelSession
+from discopop_library.ProjectManager.services.openai_adapter import OpenAIResponse
 
 # a model calling tools on a large project can take minutes for one answer on a small GPU
 TIMEOUT_SECONDS = 600.0
@@ -34,16 +35,7 @@ _ERROR_EXCERPT = 500
 Transport = Callable[[str, Dict[str, str], Dict[str, Any]], Dict[str, Any]]
 
 
-@dataclass
-class OpenAIResponse:
-    """Parsed response from OpenAI API."""
-
-    text: str
-    raw_tool_calls: List[Dict[str, any]]
-    finish_reason: str
-
-
-class OpenAICompatibleSession:
+class OpenAICompatibleSession(ModelSession):
     def __init__(
         self,
         base_url: str,
@@ -68,7 +60,7 @@ class OpenAICompatibleSession:
             "messages": [{"role": "system", "content": system}] + self._messages,
         }
         if tools:
-            body["tools"] = openai_adapter.to_tool_calls(tools)
+            body["tools"] = openai_adapter.to_openai_tool_defs(tools)
             body["tool_choice"] = "auto"
         if self._max_tokens is not None:
             body["max_tokens"] = self._max_tokens

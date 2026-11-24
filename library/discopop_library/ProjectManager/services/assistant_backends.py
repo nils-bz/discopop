@@ -71,20 +71,19 @@ def _given(value: Optional[str]) -> Optional[str]:
     return value.strip() if value and value.strip() else None
 
 
-def resolve_backend(config: AssistantBackendConfig, environ: Optional[Mapping[str, str]] = None) -> ResolvedBackend:
+def resolve_backend() -> ResolvedBackend:
     """Flag before environment before default; ValueError for an unknown provider or a missing model."""
-    env = os.environ if environ is None else environ
-    provider = (_given(config.provider) or _given(env.get(ENV_PROVIDER)) or DEFAULT_PROVIDER).lower()
+    provider = (_given(os.environ.get(ENV_PROVIDER) or DEFAULT_PROVIDER)).lower()
     if provider not in PROVIDERS:
         raise ValueError(f"Unknown assistant provider {provider!r}; choose one of {', '.join(PROVIDERS)}")
-    model = _given(config.model) or _given(env.get(ENV_MODEL))
-    base_url = _given(config.base_url) or _given(env.get(ENV_BASE_URL))
-    api_key = _given(env.get(ENV_API_KEY)) or _given(env.get(_PROVIDER_API_KEY_ENV[provider]))
+    model = _given(os.environ.get(ENV_MODEL))
+    base_url = _given(os.environ.get(ENV_BASE_URL))
+    api_key = _given(os.environ.get(ENV_API_KEY)) or _given(os.environ.get(_PROVIDER_API_KEY_ENV[provider]))
 
     if provider == PROVIDER_OPENAI:
         if model is None:
             raise ValueError(
-                f"The provider {PROVIDER_OPENAI!r} needs a model: --assistant-model or {ENV_MODEL} "
+                f"The provider {PROVIDER_OPENAI!r} needs a model: {ENV_MODEL} "
                 "(e.g. Qwen/Qwen3.8-27B-FP8, as listed by <base URL>/models)"
             )
         return ResolvedBackend(provider, model, base_url or OPENAI_DEFAULT_BASE_URL, api_key or PLACEHOLDER_API_KEY)

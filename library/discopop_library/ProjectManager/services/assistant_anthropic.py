@@ -15,7 +15,7 @@ the environment (``ANTHROPIC_API_KEY`` or an ``ant auth login`` profile).
 import importlib
 from typing import Any, Dict, List, Optional, Sequence
 
-from discopop_library.ProjectManager.services.assistant import ModelTurn, ToolCall, ToolResult, ToolSpec
+from discopop_library.ProjectManager.services.assistant import ModelTurn, ToolCall, ToolResult, ToolSpec, ModelSession
 
 MODEL = "claude-opus-5-5"
 MAX_TOKENS = 64000
@@ -25,7 +25,7 @@ EFFORT = "high"
 FALLBACK_BETA = "server-side-fallback-2026-07-01"
 
 
-class AnthropicSession:
+class AnthropicSession(ModelSession):
     def __init__(
         self, model: Optional[str] = None, base_url: Optional[str] = None, api_key: Optional[str] = None
     ) -> None:
