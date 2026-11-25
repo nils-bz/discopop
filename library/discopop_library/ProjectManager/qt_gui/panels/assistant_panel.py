@@ -15,6 +15,7 @@ proposes are listed below the chat and only change a file when the user applies 
 import difflib
 from typing import Callable, Dict, List, Optional, Sequence
 
+from PySide6.QtGui import QTextCursor
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
@@ -67,6 +68,25 @@ def model_factory_from_arguments() -> Callable[[], ModelSession]:
     """
     return lambda: make_session(resolve_backend())
 
+TEXT_STYLES = {
+    "You": {
+        "who": "font-weight:bold",
+        "text": "font-weight:bold"
+    },
+    "tool": {
+        "who": "color:gray",
+        "text": "color:gray"
+    },
+    "error": {
+        "who": "color:#b00",
+        "text": "color:gray"
+    },
+    "thinking": {
+        "who": "",
+        "text": "font-style:italic"
+    }
+}
+
 
 class AssistantPanel(Panel):
     def __init__(
@@ -90,6 +110,8 @@ class AssistantPanel(Panel):
         # then, Send is disabled
         self._init_runner: Optional[WorkRunner] = None
         self._assistant_init_error: Optional[str] = None
+
+        self._thinking_shown = False
 
         self.transcript = QTextBrowser()
         self.input = QPlainTextEdit()
@@ -153,9 +175,9 @@ class AssistantPanel(Panel):
             return
         assistant = self._assistant
         self.input.clear()
+        self._runner = start_work(self, lambda work: assistant.run_turn(text, work), self._handle)
         self._append("You", text)
         self.status.set("⏳ Assistant working ...", widgets.STATUS_BUSY)
-        self._runner = start_work(self, lambda work: assistant.run_turn(text, work), self._handle)
         self._update_buttons()
 
     def cancel_jobs(self) -> None:
@@ -180,6 +202,7 @@ class AssistantPanel(Panel):
                 self._append("error", event.error)
                 self.status.set("Assistant failed", widgets.STATUS_FAIL, reset_ms=5000)
                 return
+            self._hide_thinking()
             self.status.set("Assistant done", widgets.STATUS_OK, reset_ms=3000)
             self._finish_turn(event.result)
 
@@ -200,9 +223,39 @@ class AssistantPanel(Panel):
         self._update_buttons()
 
     def _append(self, who: str, text: str) -> None:
-        style = {"You": "font-weight:bold", "tool": "color:gray", "error": "color:#b00"}.get(who, "")
+        self._hide_thinking()
+        self._append_entry(who, text, who)
+        if self._runner is not None:
+            self._show_thinking()
+
+    def _append_entry(self, who: str, text: str, type: str) -> None:
+        style = TEXT_STYLES.get(type, "")
+        who_style = style.get("who", "") if style != "" else ""
+        text_style = style.get("text", "") if style != "" else ""
         escaped = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\n", "<br>")
-        self.transcript.append(f'<p style="{style}"><b>{who}:</b> {escaped}</p>')
+        entry = (f'<p style="{who_style}">'
+                    f'<b>{who}:</b> <span style="{text_style}">{escaped}</span>'
+                 f'</p>')
+        self.transcript.append(entry)
+
+    def _show_thinking(self) -> None:
+        if self._thinking_shown:
+            return
+        self._append_entry("Assistant", "Thinking...", "thinking")
+        self._thinking_shown = True
+
+    def _hide_thinking(self) -> None:
+        if not self._thinking_shown:
+            return
+        self._remove_last_entry()
+        self._thinking_shown = False
+
+    def _remove_last_entry(self) -> None:
+        cursor = QTextCursor(self.transcript.document())
+        cursor.movePosition(QTextCursor.MoveOperation.End)
+        cursor.movePosition(QTextCursor.MoveOperation.StartOfBlock, QTextCursor.MoveMode.KeepAnchor)
+        cursor.removeSelectedText()
+        cursor.deletePreviousChar() # paragraph break to avoid empty line remaining
 
     def _create_assistant(self, _work: WorkContext) -> Assistant:
         # on the worker thread: touches no widget
